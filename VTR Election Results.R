@@ -1,8 +1,17 @@
 library(dplyr)
 library(tidyr)
 
+# What time is the data current as of?
+vtr_time <-  Sys.time()
+
+# Senate first preference by division
 sen_fp_div <- read.csv("http://vtr.aec.gov.au/Downloads/SenateFirstPrefsByDivisionByVoteTypeDownload-20499.csv", 
                        skip=1, sep=",", header=TRUE)
+
+# Senate first preference by group by vote type
+sen_fp_group_type <- read.csv("http://vtr.aec.gov.au/Downloads/SenateFirstPrefsByStateByGroupByVoteTypeDownload-20499.csv",
+                              skip=1, sep=",", header=TRUE)
+
 enrolment <- read.csv("http://vtr.aec.gov.au/Downloads/GeneralEnrolmentByStateDownload-20499.csv",
                       skip=1, sep=",", header=TRUE)
 
@@ -44,7 +53,7 @@ enrolment_div <- read.csv("http://vtr.aec.gov.au/Downloads/GeneralEnrolmentByDiv
                           skip=1, sep=",", header=TRUE)
 
 # Senate votes by state:
-sen_fp_div %>% 
+derived_sen_turnout <- sen_fp_div %>% 
   select(StateAb, PartyName, TotalVotes) %>% 
   group_by(StateAb) %>% 
   summarise(votes=sum(TotalVotes)) %>% 
@@ -120,3 +129,15 @@ derived_pp_totals <- hor_fp_pp %>%
 # Add a pre-poll ordinaries column on to derived_div_total_type
 derived_div_total_type <- derived_div_total_type %>% 
   left_join(derived_pp_totals %>% group_by(DivisionNm) %>% filter(prepoll == "Y") %>% summarise(prepoll.ordinary = sum(votes)))
+
+# Senate Quotas (DD and half Senate)
+derived_sen_quotas <- sen_fp_group_type %>% 
+  group_by(StateAb) %>% 
+  left_join(sen_fp_group_type %>% group_by(StateAb) %>% summarise(state.total=sum(TotalVotes))) %>% 
+  mutate(quota.dd=ifelse(StateAb == "ACT"|StateAb == "NT", (state.total/3)+1, (state.total/13)+1)) %>% 
+  mutate(quota.hs=ifelse(StateAb == "ACT"|StateAb == "NT", (state.total/3)+1, (state.total/7)+1)) %>% 
+  mutate(num_quotas.dd = TotalVotes/quota.dd, num_quotas.hs = TotalVotes/quota.hs) %>% 
+  select(StateAb, GroupAb, TotalVotes, num_quotas.dd, num_quotas.hs)
+ 
+# # To find out the current Senate results for a state:
+# derived_sen_quotas %>% filter(StateAb == "SA") %>% arrange(desc(num_quotas.dd))
