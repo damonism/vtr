@@ -68,14 +68,6 @@ derived_formal_votes_div <- hor_fp_pp %>%
   filter(PartyNm != "Informal") %>% 
   group_by(DivisionNm, PartyAb) %>% 
   summarise(votes=sum(OrdinaryVotes))
-  
-# # Two candidate preferred by parties by Division (Use the PP one instead - this doesn't include dec votes)
-# derived_tcp_div <- hor_tcp_pp %>% 
-#   group_by(DivisionNm, PartyAb) %>% summarise(votes = sum(OrdinaryVotes)) %>% spread(key = PartyAb, value = votes)
-# 
-# derived_tcp_div$total <- rowSums(derived_tcp_div[-1], na.rm=TRUE)
-# 
-# derived_tcp_div <- derived_tcp_div %>% mutate_each(funs(./total*100), -total)
 
 # Two candidate preferred by parties by Polling Place
 derived_tcp_pp <- hor_tcp_pp %>% 
@@ -115,11 +107,20 @@ derived_tcp_pp$PollingPlace <- as.factor(derived_tcp_pp$PollingPlace)
 derived_tcp_pp_percent <- derived_tcp_pp %>% 
   mutate_each(funs(./total*100), -total, -DivisionNm, -PollingPlace)
 
+  # TCP division totals (note only works with dplyr > 0.5)
+derived_tcp_div <- derived_tcp_pp %>% 
+  group_by(DivisionNm) %>% 
+  summarise_each(funs(sum(.,na.rm=TRUE)), -PollingPlace, -DivisionNm)
+
+  # TCP division as a percentage
+derived_tcp_div_percent <- derived_tcp_div %>% 
+  mutate_each(funs(./total*100), -total, -DivisionNm)
+
 # Grim reaper - Note, not exactly the same as the AEC's Grim Reaper because it goes by former candidate, not party.
-derived_tcp_div <- derived_tcp_div %>% 
+derived_tcp_div_percent <- derived_tcp_div_percent %>% 
   left_join(hor_fp_cand_type %>% filter(HistoricElected == "Y") %>% select(DivisionNm, Historic=PartyAb))
 
-derived_reaper <- derived_tcp_div %>% 
+derived_reaper <- derived_tcp_div_percent %>% 
   gather(PartyAb, vote.percent, 2:10) %>% 
   filter(PartyAb == Historic & vote.percent < 50) %>% 
   left_join(hor_fp_cand_type 
