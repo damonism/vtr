@@ -16,7 +16,8 @@ sen_fp_div <- get_vtr_file("SenateFirstPrefsByDivisionByVoteTypeDownload-20499.c
 # Senate first preference by group by vote type
 sen_fp_group_type <- get_vtr_file("SenateFirstPrefsByStateByGroupByVoteTypeDownload-20499.csv")
 
-enrolment <- get_vtr_file("GeneralEnrolmentByStateDownload-20499.csv")
+# enrolment <- get_vtr_file("GeneralEnrolmentByStateDownload-20499.csv")
+# Replace with: enrolment_div %>% group_by(StateAb) %>% summarise(enrolment=sum(Enrolment))
 
 # HoR First Preference by Polling Place
 pp_url <- vector()
@@ -58,8 +59,8 @@ derived_sen_turnout <- sen_fp_div %>%
   select(StateAb, PartyName, TotalVotes) %>% 
   group_by(StateAb) %>% 
   summarise(votes=sum(TotalVotes)) %>% 
-  left_join(enrolment) %>% 
-  mutate(percent_enrolment = votes/CloseOfRollsEnrolment * 100) %>% 
+  left_join(enrolment_div %>% group_by(StateAb) %>% summarise(enrolment=sum(Enrolment))) %>% 
+  mutate(percent_enrolment = votes/enrolment * 100) %>% 
   select(StateAb, votes, percent_enrolment)
 
 # House of Reps votes by Division
@@ -68,12 +69,13 @@ derived_formal_votes_div <- hor_fp_pp %>%
   group_by(DivisionNm, PartyAb) %>% 
   summarise(votes=sum(OrdinaryVotes))
   
-# Two candidate preferred by parties by Division
-derived_tcp_div <- hor_tcp_pp %>% 
-  group_by(DivisionNm, PartyAb) %>% summarise(votes = sum(OrdinaryVotes)) %>% spread(key = PartyAb, value = votes)
-
-derived_tcp_div$total <- rowSums(derived_tcp_div[-1], na.rm=TRUE)
-derived_tcp_div <- derived_tcp_div %>% mutate_each(funs(./total*100), -total)
+# # Two candidate preferred by parties by Division (Use the PP one instead - this doesn't include dec votes)
+# derived_tcp_div <- hor_tcp_pp %>% 
+#   group_by(DivisionNm, PartyAb) %>% summarise(votes = sum(OrdinaryVotes)) %>% spread(key = PartyAb, value = votes)
+# 
+# derived_tcp_div$total <- rowSums(derived_tcp_div[-1], na.rm=TRUE)
+# 
+# derived_tcp_div <- derived_tcp_div %>% mutate_each(funs(./total*100), -total)
 
 # Two candidate preferred by parties by Polling Place
 derived_tcp_pp <- hor_tcp_pp %>% 
@@ -81,9 +83,37 @@ derived_tcp_pp <- hor_tcp_pp %>%
   summarise(votes = sum(OrdinaryVotes)) %>% 
   spread(key = PartyAb, value = votes)
 
+  # Add TCP counts for Postal, Absent, Provisional and PrePoll Declaration votes as dummy polling places
+derived_tcp_pp <- bind_rows(derived_tcp_pp, hor_tcp_type %>% 
+                              group_by(DivisionNm, PartyAb) %>% 
+                              summarise(postal=sum(PostalVotes)) %>% 
+                              spread(key=PartyAb, postal) %>% 
+                              mutate(PollingPlace=as.factor("_dummy_postal")))
+
+derived_tcp_pp <- bind_rows(derived_tcp_pp, hor_tcp_type %>% 
+                              group_by(DivisionNm, PartyAb) %>% 
+                              summarise(absent=sum(AbsentVotes)) %>% 
+                              spread(key=PartyAb, absent) %>% 
+                              mutate(PollingPlace=as.factor("_dummy_absent")))
+
+derived_tcp_pp <- bind_rows(derived_tcp_pp, hor_tcp_type %>% 
+                              group_by(DivisionNm, PartyAb) %>% 
+                              summarise(provisional=sum(ProvisionalVotes)) %>% 
+                              spread(key=PartyAb, provisional) %>% 
+                              mutate(PollingPlace=as.factor("_dummy_provisional")))
+
+derived_tcp_pp <- bind_rows(derived_tcp_pp, hor_tcp_type %>% 
+                              group_by(DivisionNm, PartyAb) %>% 
+                              summarise(prepolldec=sum(PrePollVotes)) %>% 
+                              spread(key=PartyAb, prepolldec) %>% 
+                              mutate(PollingPlace=as.factor("_dummy_prepolldec")))
+
 derived_tcp_pp$total <- rowSums(derived_tcp_pp[-c(1,2)], na.rm=TRUE)
-derived_tcp_pp <- derived_tcp_pp %>% 
-  mutate_each(funs(./total*100), -total)
+derived_tcp_pp$PollingPlace <- as.factor(derived_tcp_pp$PollingPlace)
+
+  # TCP by polling place as percentage
+derived_tcp_pp_percent <- derived_tcp_pp %>% 
+  mutate_each(funs(./total*100), -total, -DivisionNm, -PollingPlace)
 
 # Grim reaper - Note, not exactly the same as the AEC's Grim Reaper because it goes by former candidate, not party.
 derived_tcp_div <- derived_tcp_div %>% 
