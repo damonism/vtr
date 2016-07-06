@@ -4,53 +4,54 @@ library(tidyr)
 # What time is the data current as of?
 vtr_time <-  Sys.time()
 
+get_vtr_file <- function(filename) {
+  filepath <- "http://vtr.aec.gov.au/Downloads"
+  url <- paste(filepath, filename, sep = "/")
+  return(read.csv(url, skip=1, sep=",", header=TRUE))
+}
+
 # Senate first preference by division
-sen_fp_div <- read.csv("http://vtr.aec.gov.au/Downloads/SenateFirstPrefsByDivisionByVoteTypeDownload-20499.csv", 
-                       skip=1, sep=",", header=TRUE)
+sen_fp_div <- get_vtr_file("SenateFirstPrefsByDivisionByVoteTypeDownload-20499.csv")
 
 # Senate first preference by group by vote type
-sen_fp_group_type <- read.csv("http://vtr.aec.gov.au/Downloads/SenateFirstPrefsByStateByGroupByVoteTypeDownload-20499.csv",
-                              skip=1, sep=",", header=TRUE)
+sen_fp_group_type <- get_vtr_file("SenateFirstPrefsByStateByGroupByVoteTypeDownload-20499.csv")
 
-enrolment <- read.csv("http://vtr.aec.gov.au/Downloads/GeneralEnrolmentByStateDownload-20499.csv",
-                      skip=1, sep=",", header=TRUE)
+enrolment <- get_vtr_file("GeneralEnrolmentByStateDownload-20499.csv")
 
 # HoR First Preference by Polling Place
 pp_url <- vector()
-pp_url["nsw"] <- "http://vtr.aec.gov.au/Downloads/HouseStateFirstPrefsByPollingPlaceDownload-20499-NSW.csv"
-pp_url["vic"] <- "http://vtr.aec.gov.au/Downloads/HouseStateFirstPrefsByPollingPlaceDownload-20499-VIC.csv"
-pp_url["qld"] <- "http://vtr.aec.gov.au/Downloads/HouseStateFirstPrefsByPollingPlaceDownload-20499-QLD.csv"
-pp_url["wa"] <- "http://vtr.aec.gov.au/Downloads/HouseStateFirstPrefsByPollingPlaceDownload-20499-WA.csv"
-pp_url["sa"] <- "http://vtr.aec.gov.au/Downloads/HouseStateFirstPrefsByPollingPlaceDownload-20499-SA.csv"
-pp_url["tas"] <- "http://vtr.aec.gov.au/Downloads/HouseStateFirstPrefsByPollingPlaceDownload-20499-TAS.csv"
-pp_url["act"] <- "http://vtr.aec.gov.au/Downloads/HouseStateFirstPrefsByPollingPlaceDownload-20499-ACT.csv"
-pp_url["nt"] <- "http://vtr.aec.gov.au/Downloads/HouseStateFirstPrefsByPollingPlaceDownload-20499-NT.csv"
+pp_url["nsw"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-NSW.csv"
+pp_url["vic"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-VIC.csv"
+pp_url["qld"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-QLD.csv"
+pp_url["wa"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-WA.csv"
+pp_url["sa"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-SA.csv"
+pp_url["tas"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-TAS.csv"
+pp_url["act"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-ACT.csv"
+pp_url["nt"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-NT.csv"
 
-hor_fp_pp <- read.csv(pp_url["nsw"], skip=1, sep=",", header=TRUE)
-hor_fp_pp <- rbind(hor_fp_pp,
-                   read.csv(pp_url["vic"], skip=1, sep=",", header=TRUE), 
-                   read.csv(pp_url["qld"], skip=1, sep=",", header=TRUE), 
-                   read.csv(pp_url["wa"], skip=1, sep=",", header=TRUE), 
-                   read.csv(pp_url["sa"], skip=1, sep=",", header=TRUE), 
-                   read.csv(pp_url["tas"], skip=1, sep=",", header=TRUE), 
-                   read.csv(pp_url["act"], skip=1, sep=",", header=TRUE), 
-                   read.csv(pp_url["nt"], skip=1, sep=",", header=TRUE)
-                   )
+hor_fp_pp <- rbind(get_vtr_file(pp_url["nsw"]),
+                   get_vtr_file(pp_url["vic"]), 
+                   get_vtr_file(pp_url["qld"]), 
+                   get_vtr_file(pp_url["wa"]), 
+                   get_vtr_file(pp_url["sa"]), 
+                   get_vtr_file(pp_url["tas"]), 
+                   get_vtr_file(pp_url["act"]), 
+                   get_vtr_file(pp_url["nt"]))
 
 # TCP by polling place
-hor_tcp_pp <- read.csv("http://vtr.aec.gov.au/Downloads/HouseTcpByCandidateByPollingPlaceDownload-20499.csv",
-                       skip=1, sep=",", header=TRUE)
+hor_tcp_pp <- get_vtr_file("HouseTcpByCandidateByPollingPlaceDownload-20499.csv")
+
+# TCP by vote type
+hor_tcp_type <- get_vtr_file("HouseTcpByCandidateByVoteTypeDownload-20499.csv")
+
 # Polling place locations
-pp_location <- read.csv("http://vtr.aec.gov.au/Downloads/GeneralPollingPlacesDownload-20499.csv",
-                        skip=1, sep=",", header=TRUE)
+pp_location <- get_vtr_file("GeneralPollingPlacesDownload-20499.csv")
 
 # First preference by candidate by vote type (by division)
-hor_fp_cand_type <- read.csv("http://vtr.aec.gov.au/Downloads/HouseFirstPrefsByCandidateByVoteTypeDownload-20499.csv",
-                             skip=1, sep=",", header=TRUE) 
+hor_fp_cand_type <- get_vtr_file("HouseFirstPrefsByCandidateByVoteTypeDownload-20499.csv") 
 
 # Enrolment by division
-enrolment_div <- read.csv("http://vtr.aec.gov.au/Downloads/GeneralEnrolmentByDivisionDownload-20499.csv",
-                          skip=1, sep=",", header=TRUE)
+enrolment_div <- get_vtr_file("GeneralEnrolmentByDivisionDownload-20499.csv")
 
 # Senate votes by state:
 derived_sen_turnout <- sen_fp_div %>% 
@@ -62,7 +63,7 @@ derived_sen_turnout <- sen_fp_div %>%
   select(StateAb, votes, percent_enrolment)
 
 # House of Reps votes by Division
-hor_fp_pp %>% 
+derived_formal_votes_div <- hor_fp_pp %>% 
   filter(PartyNm != "Informal") %>% 
   group_by(DivisionNm, PartyAb) %>% 
   summarise(votes=sum(OrdinaryVotes))
