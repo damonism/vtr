@@ -54,14 +54,57 @@ hor_fp_cand_type <- get_vtr_file("HouseFirstPrefsByCandidateByVoteTypeDownload-2
 # Enrolment by division
 enrolment_div <- get_vtr_file("GeneralEnrolmentByDivisionDownload-20499.csv")
 
-# Senate votes by state:
-derived_sen_turnout <- sen_fp_div %>% 
-  select(StateAb, PartyName, TotalVotes) %>% 
-  group_by(StateAb) %>% 
-  summarise(votes=sum(TotalVotes)) %>% 
-  left_join(enrolment_div %>% group_by(StateAb) %>% summarise(enrolment=sum(Enrolment))) %>% 
-  mutate(percent_enrolment = votes/enrolment * 100) %>% 
-  select(StateAb, votes, percent_enrolment)
+# Combined polling place table (with declaration votes as dummy polling places)
+prepoll_table <- function(){
+  
+  tmp_pp_all <- hor_fp_pp
+  tmp_pp_all$DeclarationVote <- "N"
+  
+  # Absent votes:
+  tmp_pp_all <- bind_rows(tmp_pp_all, hor_fp_cand_type %>% 
+                            select(-OrdinaryVotes, -ProvisionalVotes, -PrePollVotes, -PostalVotes, -TotalVotes) %>% 
+                            rename(OrdinaryVotes = AbsentVotes) %>% 
+                            mutate(PollingPlace=as.factor("_dummy_absent"), DeclarationVote="Y"))
+  
+  # Provisional votes:
+  tmp_pp_all <- bind_rows(tmp_pp_all, hor_fp_cand_type %>% 
+                            select(-OrdinaryVotes, -AbsentVotes, -PrePollVotes, -PostalVotes, -TotalVotes) %>% 
+                            rename(OrdinaryVotes = ProvisionalVotes) %>% 
+                            mutate(PollingPlace=as.factor("_dummy_provisional"), DeclarationVote="Y"))
+  
+  # PrePoll dec votes:
+  tmp_pp_all <- bind_rows(tmp_pp_all, hor_fp_cand_type %>% 
+                            select(-OrdinaryVotes, -AbsentVotes, -ProvisionalVotes, -PostalVotes, -TotalVotes) %>% 
+                            rename(OrdinaryVotes = PrePollVotes) %>% 
+                            mutate(PollingPlace=as.factor("_dummy_prepolldec"), DeclarationVote="Y"))
+  
+  # Postal votes:
+  tmp_pp_all <- bind_rows(tmp_pp_all, hor_fp_cand_type %>% 
+                            select(-OrdinaryVotes, -AbsentVotes, -ProvisionalVotes, -PrePollVotes, -TotalVotes) %>% 
+                            rename(OrdinaryVotes = PostalVotes) %>% 
+                            mutate(PollingPlace=as.factor("_dummy_postal"), DeclarationVote="Y"))
+  # PrePoll ordinaries
+  tmp_pp_all <- tmp_pp_all %>% 
+    mutate(PrepollOrdinary = ifelse(grepl("PPVC", PollingPlace) | grepl("PREPOLL", PollingPlace), "Y", "N"))
+  
+  tmp_pp_all$PollingPlace <- as.factor(tmp_pp_all$PollingPlace)
+  tmp_pp_all$DeclarationVote <- as.factor(tmp_pp_all$DeclarationVote)
+  tmp_pp_all$PrepollOrdinary <- as.factor(tmp_pp_all$PrepollOrdinary)
+  return(tmp_pp_all)
+}
+
+derived_pp_all <- prepoll_table()
+
+# Senate turnout by state (as a proportion of enrolments):
+prelim_senate_turnout_by_state <- function() {
+  sen_fp_div %>% 
+    select(StateAb, PartyName, TotalVotes) %>% 
+    group_by(StateAb) %>% 
+    summarise(votes=sum(TotalVotes)) %>% 
+    left_join(enrolment_div %>% group_by(StateAb) %>% summarise(enrolment=sum(Enrolment))) %>% 
+    mutate(percent_enrolment = votes/enrolment * 100) %>% 
+    select(StateAb, votes, percent_enrolment)
+}
 
 # House of Reps votes by Division
 derived_formal_votes_div <- hor_fp_pp %>% 
@@ -70,47 +113,53 @@ derived_formal_votes_div <- hor_fp_pp %>%
   summarise(votes=sum(OrdinaryVotes))
 
 # Two candidate preferred by parties by Polling Place
-derived_tcp_pp <- hor_tcp_pp %>% 
-  group_by(DivisionNm, PollingPlace, PartyAb) %>% 
-  summarise(votes = sum(OrdinaryVotes)) %>% 
-  spread(key = PartyAb, value = votes)
-
+tcp_by_party_by_pollingplace <- function(){
+  tmp_tcp_pp <- hor_tcp_pp %>% 
+    group_by(DivisionNm, PollingPlace, PartyAb) %>% 
+    summarise(votes = sum(OrdinaryVotes)) %>% 
+    spread(key = PartyAb, value = votes)
+  
   # Add TCP counts for Postal, Absent, Provisional and PrePoll Declaration votes as dummy polling places
-derived_tcp_pp <- bind_rows(derived_tcp_pp, hor_tcp_type %>% 
-                              group_by(DivisionNm, PartyAb) %>% 
-                              summarise(postal=sum(PostalVotes)) %>% 
-                              spread(key=PartyAb, postal) %>% 
-                              mutate(PollingPlace=as.factor("_dummy_postal")))
+  tmp_tcp_pp <- bind_rows(tmp_tcp_pp, hor_tcp_type %>% 
+                            group_by(DivisionNm, PartyAb) %>% 
+                            summarise(postal=sum(PostalVotes)) %>% 
+                            spread(key=PartyAb, postal) %>% 
+                            mutate(PollingPlace=as.factor("_dummy_postal")))
+  
+  tmp_tcp_pp <- bind_rows(tmp_tcp_pp, hor_tcp_type %>% 
+                            group_by(DivisionNm, PartyAb) %>% 
+                            summarise(absent=sum(AbsentVotes)) %>% 
+                            spread(key=PartyAb, absent) %>% 
+                            mutate(PollingPlace=as.factor("_dummy_absent")))
+  
+  tmp_tcp_pp <- bind_rows(tmp_tcp_pp, hor_tcp_type %>% 
+                            group_by(DivisionNm, PartyAb) %>% 
+                            summarise(provisional=sum(ProvisionalVotes)) %>% 
+                            spread(key=PartyAb, provisional) %>% 
+                            mutate(PollingPlace=as.factor("_dummy_provisional")))
+  
+  tmp_tcp_pp <- bind_rows(tmp_tcp_pp, hor_tcp_type %>% 
+                            group_by(DivisionNm, PartyAb) %>% 
+                            summarise(prepolldec=sum(PrePollVotes)) %>% 
+                            spread(key=PartyAb, prepolldec) %>% 
+                            mutate(PollingPlace=as.factor("_dummy_prepolldec")))
+  
+  tmp_tcp_pp$total <- rowSums(tmp_tcp_pp[-c(1,2)], na.rm=TRUE)
+  tmp_tcp_pp$PollingPlace <- as.factor(tmp_tcp_pp$PollingPlace)
+  
+  # TCP division totals (note only works with dplyr > 0.5)
+  tmp_tcp_pp <- tmp_tcp_pp %>% 
+    group_by(DivisionNm) %>% 
+    summarise_each(funs(sum(.,na.rm=TRUE)), -PollingPlace, -DivisionNm)
+  
+}
 
-derived_tcp_pp <- bind_rows(derived_tcp_pp, hor_tcp_type %>% 
-                              group_by(DivisionNm, PartyAb) %>% 
-                              summarise(absent=sum(AbsentVotes)) %>% 
-                              spread(key=PartyAb, absent) %>% 
-                              mutate(PollingPlace=as.factor("_dummy_absent")))
-
-derived_tcp_pp <- bind_rows(derived_tcp_pp, hor_tcp_type %>% 
-                              group_by(DivisionNm, PartyAb) %>% 
-                              summarise(provisional=sum(ProvisionalVotes)) %>% 
-                              spread(key=PartyAb, provisional) %>% 
-                              mutate(PollingPlace=as.factor("_dummy_provisional")))
-
-derived_tcp_pp <- bind_rows(derived_tcp_pp, hor_tcp_type %>% 
-                              group_by(DivisionNm, PartyAb) %>% 
-                              summarise(prepolldec=sum(PrePollVotes)) %>% 
-                              spread(key=PartyAb, prepolldec) %>% 
-                              mutate(PollingPlace=as.factor("_dummy_prepolldec")))
-
-derived_tcp_pp$total <- rowSums(derived_tcp_pp[-c(1,2)], na.rm=TRUE)
-derived_tcp_pp$PollingPlace <- as.factor(derived_tcp_pp$PollingPlace)
+derived_tcp_pp <- tcp_by_party_by_pollingplace()
 
   # TCP by polling place as percentage
 derived_tcp_pp_percent <- derived_tcp_pp %>% 
   mutate_each(funs(./total*100), -total, -DivisionNm, -PollingPlace)
 
-  # TCP division totals (note only works with dplyr > 0.5)
-derived_tcp_div <- derived_tcp_pp %>% 
-  group_by(DivisionNm) %>% 
-  summarise_each(funs(sum(.,na.rm=TRUE)), -PollingPlace, -DivisionNm)
 
   # TCP division as a percentage
 derived_tcp_div_percent <- derived_tcp_div %>% 
@@ -162,6 +211,7 @@ derived_pp_totals <- hor_fp_pp %>%
 derived_div_total_type <- derived_div_total_type %>% 
   left_join(derived_pp_totals %>% group_by(DivisionNm) %>% filter(prepoll == "Y") %>% summarise(prepoll.ordinary = sum(votes)))
 
+  
 # Senate Quotas (DD and half Senate)
 derived_sen_quotas <- sen_fp_group_type %>% 
   group_by(StateAb) %>% 
