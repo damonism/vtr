@@ -40,14 +40,7 @@ pp_url["tas"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-TAS.csv"
 pp_url["act"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-ACT.csv"
 pp_url["nt"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-NT.csv"
 
-hor_fp_pp <- rbind(get_vtr_file(pp_url["nsw"]),
-                   get_vtr_file(pp_url["vic"]), 
-                   get_vtr_file(pp_url["qld"]), 
-                   get_vtr_file(pp_url["wa"]), 
-                   get_vtr_file(pp_url["sa"]), 
-                   get_vtr_file(pp_url["tas"]), 
-                   get_vtr_file(pp_url["act"]), 
-                   get_vtr_file(pp_url["nt"]))
+hor_fp_pp <- do.call("rbind", lapply(pp_url, get_vtr_file))
 
 # TCP by polling place
 hor_tcp_pp <- get_vtr_file("HouseTcpByCandidateByPollingPlaceDownload-20499.csv")
