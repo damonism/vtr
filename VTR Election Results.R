@@ -184,23 +184,29 @@ tcp_by_party_by_division_percent <- function() {
 }
 
 # Grim reaper - Note, not exactly the same as the AEC's Grim Reaper because it goes by former candidate, not party.
-derived_tcp_div_percent <- derived_tcp_div_percent %>% 
-  left_join(hor_fp_cand_type %>% filter(HistoricElected == "Y") %>% select(DivisionNm, Historic=PartyAb))
-
-derived_reaper <- derived_tcp_div_percent %>% 
-  gather(PartyAb, vote.percent, 2:10) %>% 
-  filter(PartyAb == Historic & vote.percent < 50) %>% 
-  left_join(hor_fp_cand_type 
-            %>% select(DivisionNm, PartyAb, Surname, GivenNm)) %>% 
-  left_join(enrolment_div 
-            %>% select(DivisionNm, Enrolment, StateAb)) %>% 
-  left_join(derived_tcp_div 
-            %>% gather(PartyAb, vote.percent, 2:10) %>% filter(vote.percent > 50) %>% select(DivisionNm, lead.party=PartyAb)) %>% 
-  mutate(percent.counted = total/Enrolment * 100) %>% 
-  select(StateAb, DivisionNm, held.party=PartyAb, held.tpp=vote.percent, held.surname=Surname, held.givenname=GivenNm, lead.party, 
-         number.counted=total, percent.counted) %>% 
-  ungroup %>% 
-  arrange(percent.counted)
+grim_reaper <- function() {
+  
+  tmp_reaper_1 <- tcp_by_party_by_division_percent() %>% 
+    left_join(hor_fp_cand_type %>% filter(HistoricElected == "Y") %>% select(DivisionNm, Historic=PartyAb))
+  
+  tmp_reaper <- tmp_reaper_1 %>% 
+    gather(PartyAb, vote.percent, 2:10) %>% 
+    filter(PartyAb == Historic & vote.percent < 50) %>% 
+    left_join(hor_fp_cand_type 
+              %>% select(DivisionNm, PartyAb, Surname, GivenNm)) %>% 
+    left_join(enrolment_div 
+              %>% select(DivisionNm, Enrolment, StateAb)) %>% 
+    left_join(derived_tcp_div 
+              %>% gather(PartyAb, vote.percent, 2:10) %>% filter(vote.percent > 50) %>% select(DivisionNm, lead.party=PartyAb)) %>% 
+    mutate(percent.counted = total/Enrolment * 100) %>% 
+    select(StateAb, DivisionNm, held.party=PartyAb, held.tpp=vote.percent, held.surname=Surname, held.givenname=GivenNm, lead.party, 
+           number.counted=total, percent.counted) %>% 
+    ungroup %>% 
+    arrange(percent.counted)
+  
+  return(tmp_reaper)
+  
+}
 
 # Not sure where this one should go...
 derived_prop_vote_div <- hor_fp_cand_type %>% 
