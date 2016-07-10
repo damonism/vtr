@@ -1,6 +1,16 @@
 library(dplyr)
 library(tidyr)
 
+##
+## Functions list
+##
+## get_vtr_file() <- Download a CSV file from the VTR. 
+## polling_place_results_by_candidate() <- Results by polling place and candidate with dec votes as dummy PPs
+## prelim_senate_turnout_by_state <- Percentage turnout for Senate votes by state based on state enrolments
+## formal_hor_votes_by_party_by_div <- Formal HoR votes by party by division
+## tcp_by_party_by_pollingplace <- Two candidate perferred by party by polling place
+##
+
 # What time is the data current as of?
 vtr_time <-  Sys.time()
 
@@ -55,7 +65,7 @@ hor_fp_cand_type <- get_vtr_file("HouseFirstPrefsByCandidateByVoteTypeDownload-2
 enrolment_div <- get_vtr_file("GeneralEnrolmentByDivisionDownload-20499.csv")
 
 # Combined polling place table (with declaration votes as dummy polling places)
-prepoll_table <- function(){
+polling_place_results_by_candidate <- function(){
   
   tmp_pp_all <- hor_fp_pp
   tmp_pp_all$DeclarationVote <- "N"
@@ -93,7 +103,7 @@ prepoll_table <- function(){
   return(tmp_pp_all)
 }
 
-derived_pp_all <- prepoll_table()
+derived_pp_all <- polling_place_results_by_candidate()
 
 # Senate turnout by state (as a proportion of enrolments):
 prelim_senate_turnout_by_state <- function() {
@@ -106,11 +116,17 @@ prelim_senate_turnout_by_state <- function() {
     select(StateAb, votes, percent_enrolment)
 }
 
-# House of Reps votes by Division
-derived_formal_votes_div <- hor_fp_pp %>% 
-  filter(PartyNm != "Informal") %>% 
-  group_by(DivisionNm, PartyAb) %>% 
-  summarise(votes=sum(OrdinaryVotes))
+# Formal House of Reps votes by Division
+formal_hor_votes_by_party_by_div <- function() {
+  tmp_formal_votes_div <- hor_fp_pp %>% 
+    filter(PartyNm != "Informal") %>% 
+    group_by(DivisionNm, PartyAb) %>% 
+    summarise(votes=sum(OrdinaryVotes))
+  
+  return(tmp_formal_votes_div)
+}
+
+derived_formal_votes_div <- formal_hor_votes_by_party_by_div()
 
 # Two candidate preferred by parties by Polling Place
 tcp_by_party_by_pollingplace <- function(){
@@ -147,23 +163,32 @@ tcp_by_party_by_pollingplace <- function(){
   tmp_tcp_pp$total <- rowSums(tmp_tcp_pp[-c(1,2)], na.rm=TRUE)
   tmp_tcp_pp$PollingPlace <- as.factor(tmp_tcp_pp$PollingPlace)
   
-  # TCP division totals (note only works with dplyr > 0.5)
-  tmp_tcp_pp <- tmp_tcp_pp %>% 
-    group_by(DivisionNm) %>% 
-    summarise_each(funs(sum(.,na.rm=TRUE)), -PollingPlace, -DivisionNm)
-  
+  return(tmp_tcp_pp)
 }
 
 derived_tcp_pp <- tcp_by_party_by_pollingplace()
 
-  # TCP by polling place as percentage
-derived_tcp_pp_percent <- derived_tcp_pp %>% 
-  mutate_each(funs(./total*100), -total, -DivisionNm, -PollingPlace)
+# TCP by polling place as percentage
+tcp_by_party_by_pollingplace_percent <- function(){
+  
+  tmp_tcp_pp_percent <- tcp_by_party_by_pollingplace() %>% 
+    mutate_each(funs(./total*100), -total, -DivisionNm, -PollingPlace)
+  
+  return(tmp_tcp_pp_percent)
+}
 
-
+# TCP division totals as a precentage (note only works with dplyr > 0.5)
+tcp_by_party_by_division_percent <- function() {
+  tmp_tcp_pp_percent <- tcp_by_party_by_pollingplace() %>% 
+    group_by(DivisionNm) %>% 
+    summarise_each(funs(sum(.,na.rm=TRUE)), -PollingPlace, -DivisionNm)
+  
   # TCP division as a percentage
-derived_tcp_div_percent <- derived_tcp_div %>% 
-  mutate_each(funs(./total*100), -total, -DivisionNm)
+  tmp_tcp_pp_percent <- tmp_tcp_pp_percent %>% 
+    mutate_each(funs(./total*100), -total, -DivisionNm)
+  
+  return(tmp_tcp_pp_percent)
+}
 
 # Grim reaper - Note, not exactly the same as the AEC's Grim Reaper because it goes by former candidate, not party.
 derived_tcp_div_percent <- derived_tcp_div_percent %>% 
