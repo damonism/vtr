@@ -10,6 +10,8 @@ library(tidyr)
 ## formal_hor_votes_by_party_by_div() <- Formal HoR votes by party by division
 ## tcp_by_party_by_pollingplace() <- Two candidate perferred by party by polling place
 ## vote_type_by_div_inc_ppord() <- Table of states and divisions with ord, abs, prov, pp.dec., postals, pp.ord, total 
+## calculate_senate_quotas(vacancies) <- Calculate senate first preference quotas (based on vacancies)
+## grim_reaper() <- Show divisions with sitting candidate lagging in the count.
 
 # What time is the data current as of?
 vtr_time <-  Sys.time()
@@ -187,17 +189,21 @@ tcp_by_party_by_division_percent <- function() {
 grim_reaper <- function() {
   
   tmp_reaper_1 <- tcp_by_party_by_division_percent() %>% 
-    left_join(hor_fp_cand_type %>% filter(HistoricElected == "Y") %>% select(DivisionNm, Historic=PartyAb))
+    left_join(hor_fp_cand_type %>% filter(HistoricElected == "Y") %>% select(DivisionNm, Historic=PartyAb), 
+              by = "DivisionNm")
   
   tmp_reaper <- tmp_reaper_1 %>% 
     gather(PartyAb, vote.percent, 2:10) %>% 
     filter(PartyAb == Historic & vote.percent < 50) %>% 
     left_join(hor_fp_cand_type 
-              %>% select(DivisionNm, PartyAb, Surname, GivenNm)) %>% 
+              %>% select(DivisionNm, PartyAb, Surname, GivenNm), 
+              by = c("DivisionNm", "PartyAb")) %>% 
     left_join(enrolment_div 
-              %>% select(DivisionNm, Enrolment, StateAb)) %>% 
-    left_join(derived_tcp_div 
-              %>% gather(PartyAb, vote.percent, 2:10) %>% filter(vote.percent > 50) %>% select(DivisionNm, lead.party=PartyAb)) %>% 
+              %>% select(DivisionNm, Enrolment, StateAb), 
+              by = "DivisionNm") %>% 
+    left_join(tcp_by_party_by_division_percent()
+              %>% gather(PartyAb, vote.percent, 2:10) %>% filter(vote.percent > 50) %>% select(DivisionNm, lead.party=PartyAb), 
+              by = "DivisionNm") %>%
     mutate(percent.counted = total/Enrolment * 100) %>% 
     select(StateAb, DivisionNm, held.party=PartyAb, held.tpp=vote.percent, held.surname=Surname, held.givenname=GivenNm, lead.party, 
            number.counted=total, percent.counted) %>% 
