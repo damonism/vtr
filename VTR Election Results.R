@@ -353,6 +353,20 @@ division_total_percent <- function(division){
 
 }
 
+seat_summary <- function() {
+  
+  tmp_enrolments <- enrolment_div %>% 
+    select(DivisionID, Enrolment)
+
+  tmp_total <- derived_pp_all %>% 
+    group_by(StateAb, DivisionID, DivisionNm) %>% 
+    summarise(total.votes = sum(OrdinaryVotes)) %>% 
+    left_join(tmp_enrolments, by = "DivisionID") %>% 
+    mutate(turnout = total.votes / Enrolment * 100) %>% 
+    left_join(derived_pp_all %>% filter(HistoricElected == "Y") %>% group_by(DivisionID) %>% select(PartyAb) %>% summarise(HistoricElected = first(PartyAb)))
+  
+}
+
 # # To show both full and half senate quotas in the one table:
 # tmp <- calculate_senate_quotas() %>% 
 #   rename(quotas.hs=num_quotas) %>% 
