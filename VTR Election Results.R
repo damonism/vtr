@@ -15,6 +15,7 @@ library(tidyr)
 ## division_total_votes(division) <- Table with the votes per candidate/group in the division
 ## division_total_percent(division) <- Same thing, but with everything as a percentage of the total vote
 ## tcp_by_vote_type_by_division() <- Adds the pre-poll ordinaries to the TCP by type by division table
+## percent_party_vote_by_division() <- Number and proportion of each party's vote by division.
 
 # What time is the data current as of?
 vtr_time <-  Sys.time()
@@ -249,11 +250,17 @@ grim_reaper <- function() {
 }
 
 # Not sure where this one should go...
-derived_prop_vote_div <- hor_fp_cand_type %>% 
-  filter(PartyNm != "Informal") %>% 
-  left_join(hor_fp_cand_type %>% filter(PartyNm != "Informal") %>% group_by(DivisionNm) %>% summarise(div.total = sum(TotalVotes))) %>% 
-  mutate(prop.vote = TotalVotes/div.total * 100) %>% 
-  select(StateAb, DivisionNm, HistoricElected, PartyAb, TotalVotes, prop.vote)
+percent_party_vote_by_division <- function(){
+  tmp_prop_vote_div <- hor_fp_cand_type %>% 
+    filter(PartyNm != "Informal") %>% 
+    left_join(hor_fp_cand_type %>% 
+                filter(PartyNm != "Informal") %>% 
+                group_by(DivisionNm) %>% 
+                summarise(div.total = sum(TotalVotes)), by = "DivisionNm") %>% 
+    mutate(prop.vote = TotalVotes/div.total * 100) %>% 
+    select(StateAb, DivisionNm, HistoricElected, PartyAb, TotalVotes, prop.vote)
+  return(tmp_prop_vote_div)
+}
 
 # # Total votes by type by division
 # derived_div_total_type <- hor_fp_cand_type %>% 
@@ -265,15 +272,10 @@ derived_prop_vote_div <- hor_fp_cand_type %>%
 #             postal = sum(PostalVotes), 
 #             total = sum(TotalVotes))
 
-# Total votes by polling place
-derived_pp_totals <- hor_fp_pp %>% 
-  group_by(StateAb, DivisionNm, DivisionID, PollingPlaceID, PollingPlace) %>% 
-  summarise(votes = sum(OrdinaryVotes)) %>% 
-  mutate(prepoll = ifelse(grepl("PPVC", PollingPlace) | grepl("PREPOLL", PollingPlace), "Y", "N"))
 
 # Add a pre-poll ordinaries column on to derived_div_total_type
 vote_type_by_div_inc_ppord <- function() {
-  
+
   tmp_vote_type_total <- hor_fp_cand_type %>% 
     group_by(StateAb, DivisionNm) %>% 
     summarise(ordinary = sum(OrdinaryVotes),
@@ -283,12 +285,23 @@ vote_type_by_div_inc_ppord <- function() {
               postal = sum(PostalVotes), 
               total = sum(TotalVotes))
   
+  tmp_vote_type_total$DivisionNm <- as.character(tmp_vote_type_total$DivisionNm)
+  
+  # Total votes by polling place
+  tmp_pp_totals <- hor_fp_pp %>% 
+    group_by(StateAb, DivisionNm, DivisionID, PollingPlaceID, PollingPlace) %>% 
+    summarise(votes = sum(OrdinaryVotes)) %>% 
+    mutate(prepoll = ifelse(grepl("PPVC", PollingPlace) | grepl("PREPOLL", PollingPlace), "Y", "N"))
+  
+  tmp_pp_totals$DivisionNm <- as.character(tmp_pp_totals$DivisionNm)
+  
   tmp_vote_type_ppord <- tmp_vote_type_total %>% 
-    left_join(derived_pp_totals %>% 
+    left_join(tmp_pp_totals %>% 
                 group_by(DivisionNm) %>% 
                 filter(prepoll == "Y") %>% 
                 summarise(prepoll.ordinary = sum(votes)), by = "DivisionNm") %>% 
     select(StateAb,DivisionNm,ordinary,prepoll.ordinary,absent,provisional,prepoll.dec,postal,total)
+  tmp_vote_type_ppord$DivisionNm <- as.factor(tmp_vote_type_ppord$DivisionNm)
   return(tmp_vote_type_ppord)
 }
 
@@ -392,14 +405,14 @@ division_total_percent <- function(division){
     mutate_each(funs(. / tmp_formal_totals$total * 100), -PartyAb, -Surname, -GivenNm, -Elected, -HistoricElected, -tcp.Swing)
   
   return(rbind(tmp_formal, tmp_informal) %>% select(-CandidateID, -tcp.votes))
-
+  
 }
 
 seat_summary <- function() {
   
   tmp_enrolments <- enrolment_div %>% 
     select(DivisionID, Enrolment)
-
+  
   tmp_total <- derived_pp_all %>% 
     group_by(StateAb, DivisionID, DivisionNm) %>% 
     summarise(total.votes = sum(OrdinaryVotes)) %>% 
@@ -411,12 +424,12 @@ seat_summary <- function() {
                 select(DivisionID, PartyAb) %>% 
                 summarise(HistoricElected = first(PartyAb)), 
               by = "DivisionID") %>% 
-  left_join(derived_pp_all %>% 
-              filter(Elected == "Y") %>% 
-              group_by(DivisionID) %>% 
-              select(DivisionID, PartyAb) %>% 
-              summarise(Elected = first(PartyAb)), 
-            by = "DivisionID")
+    left_join(derived_pp_all %>% 
+                filter(Elected == "Y") %>% 
+                group_by(DivisionID) %>% 
+                select(DivisionID, PartyAb) %>% 
+                summarise(Elected = first(PartyAb)), 
+              by = "DivisionID")
   
 }
 
