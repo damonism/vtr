@@ -14,6 +14,7 @@ library(tidyr)
 ## grim_reaper() <- Show divisions with sitting candidate lagging in the count.
 ## division_total_votes(division) <- Table with the votes per candidate/group in the division
 ## division_total_percent(division) <- Same thing, but with everything as a percentage of the total vote
+## tcp_by_vote_type_by_division() <- Adds the pre-poll ordinaries to the TCP by type by division table
 
 # What time is the data current as of?
 vtr_time <-  Sys.time()
@@ -187,6 +188,37 @@ tcp_by_party_by_division_percent <- function() {
   return(tmp_tcp_pp_percent)
 }
 
+tcp_by_vote_type_by_division <- function(){
+  
+  # tmp_total_div <- derived_tcp_pp %>% 
+  #   gather(PartyAb, votes, -DivisionNm, -PollingPlace) %>% 
+  #   group_by(DivisionNm, PartyAb) %>% 
+  #   filter(PartyAb != "total") %>% 
+  #   summarise(votes = sum(votes)) %>% 
+  #   ungroup() %>% 
+  #   filter(!is.na(votes))
+  
+  tmp_prepoll_ordinary <- derived_tcp_pp %>% 
+    mutate(PrepollOrdinary = ifelse(grepl("PPVC", PollingPlace) | grepl("PREPOLL", PollingPlace), "Y", "N")) %>% 
+    filter(PrepollOrdinary == "Y") %>% 
+    group_by(DivisionNm) %>% 
+    summarise_if(is.numeric, sum) %>% 
+    gather(PartyAb, PrepollOrdinary, -DivisionNm) %>% 
+    #ungroup() %>% 
+    filter(!is.na(PrepollOrdinary)) %>% 
+    filter(PartyAb != "total")
+  
+  tmp_prepoll_ordinary$PartyAb <- as.factor(tmp_prepoll_ordinary$PartyAb)
+  
+  tmp_hor_tcp_type <- hor_tcp_type %>% 
+    left_join(tmp_prepoll_ordinary, by = c("DivisionNm", "PartyAb")) %>% 
+    select(1:12, PrepollOrdinary, 13:18)
+  
+  return(tmp_hor_tcp_type)
+}
+
+derived_hor_tcp_type <- tcp_by_vote_type_by_division()
+
 # Grim reaper - Note, not exactly the same as the AEC's Grim Reaper because it goes by former candidate, not party.
 grim_reaper <- function() {
   
@@ -255,12 +287,13 @@ vote_type_by_div_inc_ppord <- function() {
     left_join(derived_pp_totals %>% 
                 group_by(DivisionNm) %>% 
                 filter(prepoll == "Y") %>% 
-                summarise(prepoll.ordinary = sum(votes))) %>% 
+                summarise(prepoll.ordinary = sum(votes)), by = "DivisionNm") %>% 
     select(StateAb,DivisionNm,ordinary,prepoll.ordinary,absent,provisional,prepoll.dec,postal,total)
   return(tmp_vote_type_ppord)
 }
 
 derived_div_total_type <- vote_type_by_div_inc_ppord()
+
 
 # Senate Quotas (DD and half Senate)
 calculate_senate_quotas <- function(vacancies=6){
@@ -363,7 +396,18 @@ seat_summary <- function() {
     summarise(total.votes = sum(OrdinaryVotes)) %>% 
     left_join(tmp_enrolments, by = "DivisionID") %>% 
     mutate(turnout = total.votes / Enrolment * 100) %>% 
-    left_join(derived_pp_all %>% filter(HistoricElected == "Y") %>% group_by(DivisionID) %>% select(PartyAb) %>% summarise(HistoricElected = first(PartyAb)))
+    left_join(derived_pp_all %>% 
+                filter(HistoricElected == "Y") %>% 
+                group_by(DivisionID) %>% 
+                select(DivisionID, PartyAb) %>% 
+                summarise(HistoricElected = first(PartyAb)), 
+              by = "DivisionID") %>% 
+  left_join(derived_pp_all %>% 
+              filter(Elected == "Y") %>% 
+              group_by(DivisionID) %>% 
+              select(DivisionID, PartyAb) %>% 
+              summarise(Elected = first(PartyAb)), 
+            by = "DivisionID")
   
 }
 
