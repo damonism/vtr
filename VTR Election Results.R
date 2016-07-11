@@ -349,7 +349,16 @@ division_total_votes <- function(division) {
   
   tmp_table <- tmp_totals %>% 
     left_join(tmp_tcp, by = "PartyAb") %>% 
-    select(-DivisionNm, -CandidateID, -tcp.percent)
+    select(-DivisionNm, -tcp.percent)
+  
+  tmp_tcp_table <- derived_hor_tcp_type %>% 
+    filter(DivisionNm == division) %>% 
+    select(CandidateID, 12:19)
+  
+  names(tmp_tcp_table)[-1] <- gsub("^", "tcp.", names(tmp_tcp_table)[-1])
+  
+  tmp_table <- tmp_table %>% 
+    left_join(tmp_tcp_table, by = "CandidateID")
   
   return(tmp_table)
   
@@ -380,9 +389,9 @@ division_total_percent <- function(division){
   
   tmp_formal <- tmp_votes %>% 
     filter(Surname != "Informal") %>% 
-    mutate_each(funs(. / tmp_formal_totals$total * 100), -PartyAb, -Surname, -GivenNm, -Elected, -HistoricElected)
+    mutate_each(funs(. / tmp_formal_totals$total * 100), -PartyAb, -Surname, -GivenNm, -Elected, -HistoricElected, -tcp.Swing)
   
-  return(rbind(tmp_formal, tmp_informal))
+  return(rbind(tmp_formal, tmp_informal) %>% select(-CandidateID, -tcp.votes))
 
 }
 
