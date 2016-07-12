@@ -5,17 +5,24 @@ library(tidyr)
 ## Functions list
 ##
 ## get_vtr_file() <- Download a CSV file from the VTR. 
+##
+## HoR functions
+## -------------
 ## polling_place_results_by_candidate() <- Results by polling place and candidate with dec votes as dummy PPs
 ## prelim_senate_turnout_by_state() <- Percentage turnout for Senate votes by state based on state enrolments
 ## formal_hor_votes_by_party_by_div() <- Formal HoR votes by party by division
 ## tcp_by_party_by_pollingplace() <- Two candidate perferred by party by polling place
 ## vote_type_by_div_inc_ppord() <- Table of states and divisions with ord, abs, prov, pp.dec., postals, pp.ord, total 
-## calculate_senate_quotas(vacancies) <- Calculate senate first preference quotas (based on vacancies)
 ## grim_reaper() <- Show divisions with sitting candidate lagging in the count.
 ## division_total_votes(division) <- Table with the votes per candidate/group in the division
 ## division_total_percent(division) <- Same thing, but with everything as a percentage of the total vote
 ## tcp_by_vote_type_by_division() <- Adds the pre-poll ordinaries to the TCP by type by division table
 ## percent_party_vote_by_division() <- Number and proportion of each party's vote by division.
+##
+## Senate functions
+## ----------------
+## senate_quotas_candidate(vacancies) <- Senate quotas by vote type by group by candidate
+## calculate_senate_quotas(vacancies) <- Calculate senate first preference quotas (based on vacancies)
 
 # What time is the data current as of?
 vtr_time <-  Sys.time()
@@ -26,14 +33,9 @@ get_vtr_file <- function(filename) {
   return(read.csv(url, skip=1, sep=",", header=TRUE))
 }
 
-# Senate first preference by division
-sen_fp_div <- get_vtr_file("SenateFirstPrefsByDivisionByVoteTypeDownload-20499.csv")
-
-# Senate first preference by group by vote type
-sen_fp_group_type <- get_vtr_file("SenateFirstPrefsByStateByGroupByVoteTypeDownload-20499.csv")
-
-# enrolment <- get_vtr_file("GeneralEnrolmentByStateDownload-20499.csv")
-# Replace with: enrolment_div %>% group_by(StateAb) %>% summarise(enrolment=sum(Enrolment))
+##
+## HoR functions
+##
 
 # HoR First Preference by Polling Place
 pp_url <- vector()
@@ -307,29 +309,6 @@ vote_type_by_div_inc_ppord <- function() {
 
 derived_div_total_type <- vote_type_by_div_inc_ppord()
 
-
-# Senate Quotas (DD and half Senate)
-calculate_senate_quotas <- function(vacancies=6){
-  
-  # derived_sen_quotas <- sen_fp_group_type %>% 
-  # group_by(StateAb) %>% 
-  # left_join(sen_fp_group_type %>% group_by(StateAb) %>% summarise(state.total=sum(TotalVotes))) %>% 
-  # mutate(quota.dd=ifelse(StateAb == "ACT"|StateAb == "NT", (state.total/3)+1, (state.total/13)+1)) %>% 
-  # mutate(quota.hs=ifelse(StateAb == "ACT"|StateAb == "NT", (state.total/3)+1, (state.total/7)+1)) %>% 
-  # mutate(num_quotas.dd = TotalVotes/quota.dd, num_quotas.hs = TotalVotes/quota.hs) %>% 
-  # select(StateAb, GroupAb, TotalVotes, num_quotas.dd, num_quotas.hs)
-  
-  tmp_sen_quotas <- sen_fp_group_type %>% 
-    group_by(StateAb) %>% 
-    left_join(sen_fp_group_type %>% group_by(StateAb) %>% summarise(state.total=sum(TotalVotes))) %>% 
-    mutate(quota=ifelse(StateAb == "ACT"|StateAb == "NT", (state.total/3)+1, (state.total/(vacancies+1))+1)) %>% 
-    mutate(num_quotas = TotalVotes/quota) %>% 
-    select(StateAb, GroupAb, TotalVotes, num_quotas) %>% 
-    arrange(desc(TotalVotes))
-  
-  return(tmp_sen_quotas)
-}
-
 division_total_votes <- function(division) {
   
   tmp_totals <- derived_pp_all %>% 
@@ -433,12 +412,71 @@ seat_summary <- function() {
   
 }
 
+##
+## Senate functions
+##
+
+# Senate first preference by division
+sen_fp_div <- get_vtr_file("SenateFirstPrefsByDivisionByVoteTypeDownload-20499.csv")
+
+# Senate first preference by group by vote type
+sen_fp_group_type <- get_vtr_file("SenateFirstPrefsByStateByGroupByVoteTypeDownload-20499.csv")
+
+# Senate First preferences by state by group by vote type
+sen_fp_state_group_type <- get_vtr_file("SenateFirstPrefsByDivisionByVoteTypeDownload-20499.csv")
+
+# Senate Quotas (DD and half Senate)
+calculate_senate_quotas <- function(vacancies=6){
+  
+  # derived_sen_quotas <- sen_fp_group_type %>% 
+  # group_by(StateAb) %>% 
+  # left_join(sen_fp_group_type %>% group_by(StateAb) %>% summarise(state.total=sum(TotalVotes))) %>% 
+  # mutate(quota.dd=ifelse(StateAb == "ACT"|StateAb == "NT", (state.total/3)+1, (state.total/13)+1)) %>% 
+  # mutate(quota.hs=ifelse(StateAb == "ACT"|StateAb == "NT", (state.total/3)+1, (state.total/7)+1)) %>% 
+  # mutate(num_quotas.dd = TotalVotes/quota.dd, num_quotas.hs = TotalVotes/quota.hs) %>% 
+  # select(StateAb, GroupAb, TotalVotes, num_quotas.dd, num_quotas.hs)
+  
+  tmp_sen_quotas <- sen_fp_group_type %>% 
+    group_by(StateAb) %>% 
+    left_join(sen_fp_group_type %>% group_by(StateAb) %>% summarise(state.total=sum(TotalVotes))) %>% 
+    mutate(quota=ifelse(StateAb == "ACT"|StateAb == "NT", (state.total/3)+1, (state.total/(vacancies+1))+1)) %>% 
+    mutate(num_quotas = TotalVotes/quota) %>% 
+    select(StateAb, GroupAb, TotalVotes, num_quotas) %>% 
+    arrange(StateAb, desc(TotalVotes))
+  
+  return(tmp_sen_quotas)
+}
+
 # # To show both full and half senate quotas in the one table:
 # tmp <- calculate_senate_quotas() %>% 
 #   rename(quotas.hs=num_quotas) %>% 
 #   left_join(calculate_senate_quotas(12) %>% select(StateAb, GroupAb, quotas.fs=num_quotas)) %>% 
 #   filter(StateAb == "TAS") %>% 
 #   arrange(desc(TotalVotes))
+# 
+
+# Senate quotas by candidate
+senate_quotas_candidate <- function(vacancies){
+  tmp_quotas <- sen_fp_state_group_type %>% 
+    group_by(StateAb) %>% 
+    summarise(StateTotal = sum(TotalVotes)) %>% 
+    mutate(quota=ifelse(StateAb == "ACT"|StateAb == "NT", (StateTotal/3)+1, (StateTotal/(vacancies+1))+1))
+
+  tmp_candidate_quotas <- sen_fp_state_group_type %>% 
+    group_by(StateAb, Ticket, BallotPosition, PartyAb, PartyName, CandidateDetails) %>% 
+    summarise(OrdinaryVotes = sum(OrdinaryVotes),
+              AbsentVotes = sum(AbsentVotes),
+              ProvisionalVotes = sum(ProvisionalVotes),
+              PrePollVotes = sum(PrePollVotes),
+              PostalVotes = sum(PostalVotes),
+              TotalVotes = sum(TotalVotes)) %>% 
+    left_join(tmp_quotas, by = "StateAb") %>% 
+    mutate(Quotas = TotalVotes/quota) %>% 
+    ungroup() %>% 
+    select(StateAb:TotalVotes, Quotas)
+  
+  return(tmp_candidate_quotas)
+}
 
 # # Copy a table to the clipboard
 # write.table(tmp, "clipboard", sep="\t", row.names=FALSE)
