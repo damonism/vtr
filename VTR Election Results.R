@@ -8,13 +8,16 @@
 ## polling_place_results_by_candidate() <- Results by polling place and candidate with dec votes as dummy PPs
 ## prelim_senate_turnout_by_state() <- Percentage turnout for Senate votes by state based on state enrolments
 ## formal_hor_votes_by_party_by_div() <- Formal HoR votes by party by division
-## tcp_by_party_by_pollingplace() <- Two candidate perferred by party by polling place
 ## vote_type_by_div_inc_ppord() <- Table of states and divisions with ord, abs, prov, pp.dec., postals, pp.ord, total 
 ## grim_reaper() <- Show divisions with sitting candidate lagging in the count.
 ## division_total_votes(division) <- Table with the votes per candidate/group in the division
 ## division_total_percent(division) <- Same thing, but with everything as a percentage of the total vote
 ## tcp_by_vote_type_by_division() <- Adds the pre-poll ordinaries to the TCP by type by division table
 ## percent_party_vote_by_division() <- Number and proportion of each party's vote by division.
+##
+### TCP
+## tcp_by_vote_type_by_division()
+## tcp_by_party_by_pollingplace() <- Two candidate perferred by party by polling place
 ##
 ## Senate functions
 ##
@@ -41,33 +44,41 @@ get_vtr_file <- function(filename) {
 ## HoR Analysis ----
 ##
 
-# HoR First Preference by Polling Place
-pp_url <- vector()
-pp_url["nsw"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-NSW.csv"
-pp_url["vic"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-VIC.csv"
-pp_url["qld"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-QLD.csv"
-pp_url["wa"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-WA.csv"
-pp_url["sa"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-SA.csv"
-pp_url["tas"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-TAS.csv"
-pp_url["act"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-ACT.csv"
-pp_url["nt"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-NT.csv"
+get_hor_results <- function(){
+  
+  vtr_time_hor <<-  Sys.time()
+  
+  # HoR First Preference by Polling Place
+  pp_url <- vector()
+  pp_url["nsw"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-NSW.csv"
+  pp_url["vic"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-VIC.csv"
+  pp_url["qld"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-QLD.csv"
+  pp_url["wa"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-WA.csv"
+  pp_url["sa"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-SA.csv"
+  pp_url["tas"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-TAS.csv"
+  pp_url["act"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-ACT.csv"
+  pp_url["nt"] <- "HouseStateFirstPrefsByPollingPlaceDownload-20499-NT.csv"
+  
+  hor_fp_pp <<- do.call("rbind", lapply(pp_url, get_vtr_file))
+  
+  # TCP by polling place
+  hor_tcp_pp <<- get_vtr_file("HouseTcpByCandidateByPollingPlaceDownload-20499.csv")
+  
+  # TCP by vote type
+  hor_tcp_type <<- get_vtr_file("HouseTcpByCandidateByVoteTypeDownload-20499.csv")
+  
+  # Polling place locations
+  pp_location <<- get_vtr_file("GeneralPollingPlacesDownload-20499.csv")
+  
+  # First preference by candidate by vote type (by division)
+  hor_fp_cand_type <<- get_vtr_file("HouseFirstPrefsByCandidateByVoteTypeDownload-20499.csv") 
+  
+  # Enrolment by division
+  enrolment_div <<- get_vtr_file("GeneralEnrolmentByDivisionDownload-20499.csv")
+  
+}
 
-hor_fp_pp <- do.call("rbind", lapply(pp_url, get_vtr_file))
-
-# TCP by polling place
-hor_tcp_pp <- get_vtr_file("HouseTcpByCandidateByPollingPlaceDownload-20499.csv")
-
-# TCP by vote type
-hor_tcp_type <- get_vtr_file("HouseTcpByCandidateByVoteTypeDownload-20499.csv")
-
-# Polling place locations
-pp_location <- get_vtr_file("GeneralPollingPlacesDownload-20499.csv")
-
-# First preference by candidate by vote type (by division)
-hor_fp_cand_type <- get_vtr_file("HouseFirstPrefsByCandidateByVoteTypeDownload-20499.csv") 
-
-# Enrolment by division
-enrolment_div <- get_vtr_file("GeneralEnrolmentByDivisionDownload-20499.csv")
+get_hor_results()
 
 # Combined polling place table (with declaration votes as dummy polling places)
 polling_place_results_by_candidate <- function(){
@@ -109,17 +120,6 @@ polling_place_results_by_candidate <- function(){
 }
 
 derived_pp_all <- polling_place_results_by_candidate()
-
-# Senate turnout by state (as a proportion of enrolments):
-prelim_senate_turnout_by_state <- function() {
-  sen_fp_div %>% 
-    select(StateAb, PartyName, TotalVotes) %>% 
-    group_by(StateAb) %>% 
-    summarise(votes=sum(TotalVotes)) %>% 
-    left_join(enrolment_div %>% group_by(StateAb) %>% summarise(enrolment=sum(Enrolment))) %>% 
-    mutate(percent_enrolment = votes/enrolment * 100) %>% 
-    select(StateAb, votes, percent_enrolment)
-}
 
 # Formal House of Reps votes by Division
 formal_hor_votes_by_party_by_div <- function() {
@@ -226,6 +226,61 @@ tcp_by_vote_type_by_division <- function(){
 
 derived_hor_tcp_type <- tcp_by_vote_type_by_division()
 
+tcp_by_vote_type_by_division_percent <- function(){
+  
+  # Note:
+  # tcp.percent. => vote as a percentage of total vote for all candidates in the division
+  # party.percent. => vote as a percentage of that party's total TCP vote. 
+  # div.percent. => vote as a proportion of all votes in that division (all candidate votes)
+  
+  tmp_totals <- derived_hor_tcp_type %>% 
+    group_by(DivisionNm) %>% 
+    select(DivisionNm, PartyAb, HistoricElected, OrdinaryVotes:TotalVotes) %>% 
+    summarise_if(is.numeric, funs(sum))
+  
+  names(tmp_totals)[-1] <- gsub("^", "total.", names(tmp_totals)[-1])
+  
+  tmp_div_totals <-  derived_hor_tcp_type %>% 
+    left_join(tmp_totals, by="DivisionNm")
+  
+  tmp_div_totals <- tmp_div_totals %>% 
+    mutate(tpp.percent.OrdinaryVotes = OrdinaryVotes / total.OrdinaryVotes * 100,
+           tpp.percent.PrepollOrdinary = PrepollOrdinary / total.PrepollOrdinary * 100,
+           tpp.percent.AbsentVotes = AbsentVotes / total.AbsentVotes * 100,
+           tpp.percent.ProvisionalVotes = ProvisionalVotes / total.ProvisionalVotes * 100,
+           tpp.percent.PrePollVotes = PrePollVotes / total.PrePollVotes * 100,
+           tpp.percent.PostalVotes = PostalVotes / total.PostalVotes * 100,
+           tpp.percent.TotalVotes = TotalVotes / total.TotalVotes * 100)
+
+  tmp_div_totals <- tmp_div_totals %>% 
+    mutate(party.percent.OrdinaryVotes = OrdinaryVotes / TotalVotes * 100,
+           party.percent.PrepollOrdinary = PrepollOrdinary / TotalVotes * 100,
+           party.percent.AbsentVotes = AbsentVotes / TotalVotes * 100,
+           party.percent.ProvisionalVotes = ProvisionalVotes / TotalVotes * 100,
+           party.percent.PrePollVotes = PrePollVotes / TotalVotes * 100,
+           party.percent.PostalVotes = PostalVotes / TotalVotes * 100,
+           party.percent.TotalVotes = TotalVotes / TotalVotes * 100)
+
+  tmp_div_totals <- tmp_div_totals %>% 
+    mutate(div.percent.OrdinaryVotes = OrdinaryVotes / total.TotalVotes * 100,
+           div.percent.PrepollOrdinary = PrepollOrdinary / total.TotalVotes * 100,
+           div.percent.AbsentVotes = AbsentVotes / total.TotalVotes * 100,
+           div.percent.ProvisionalVotes = ProvisionalVotes / total.TotalVotes * 100,
+           div.percent.PrePollVotes = PrePollVotes / total.TotalVotes * 100,
+           div.percent.PostalVotes = PostalVotes / total.TotalVotes * 100,
+           div.percent.TotalVotes = TotalVotes / total.TotalVotes * 100)
+  
+  tmp_div_totals <- tmp_div_totals %>% 
+    mutate(margin.votes = (TotalVotes - (total.TotalVotes - TotalVotes))) %>% 
+    mutate(margin.percent = margin.votes / total.TotalVotes * 100)
+  
+  tmp_div_totals <- tmp_div_totals %>% 
+    left_join(enrolment_div %>% select(DivisionID, Enrolment) %>% 
+                mutate(fifty.percent.enrolment = ceiling(Enrolment/2)), by = "DivisionID")
+  
+  return(tmp_div_totals)
+}
+
 # Grim reaper - Note, not exactly the same as the AEC's Grim Reaper because it goes by former candidate, not party.
 grim_reaper <- function() {
   
@@ -329,38 +384,45 @@ division_total_votes <- function(division) {
     ungroup %>% 
     arrange(desc(total))
   
-  tmp_tcp <- tcp_by_party_by_division_percent() %>% filter(DivisionNm == division)
-  tmp_tcp$DivisionNm <- as.character(tmp_tcp$DivisionNm)
-  tmp_tcp <- gather(tmp_tcp, PartyAb, tcp.percent)
+  tmp_infomal <- tmp_totals %>% 
+    filter(Surname == "Informal")
   
-  tmp_tcp <- tmp_tcp[tmp_tcp$PartyAb != "DivisionNm",]
-  tmp_tcp_total <- as.numeric(tmp_tcp$tcp.percent[tmp_tcp$PartyAb == "total"])
-  tmp_tcp <- tmp_tcp[tmp_tcp$PartyAb != "total",]
-  tmp_tcp$tcp.percent <- as.numeric(tmp_tcp$tcp.percent)
-  tmp_tcp$tcp.percent[tmp_tcp$tcp.percent == 0] <- NA
-  tmp_tcp$tcp.votes <- tmp_tcp$tcp.percent / 100 * tmp_tcp_total
+  tmp_totals <- rbind(tmp_totals %>% filter(Surname != "Informal"), tmp_infomal)
   
-  #tmp_tcp_leading <- tmp_tcp$PartyAb[tmp_tcp$tcp.percent >= 50]
-  #tmp_tcp_laging <- tmp_tcp$PartyAb[tmp_tcp$tcp.percent > 0 & tmp_tcp$tcp.percent < 50]
+#   tmp_tcp <- tcp_by_party_by_division_percent() %>% filter(DivisionNm == division)
+#   tmp_tcp$DivisionNm <- as.character(tmp_tcp$DivisionNm)
+#   tmp_tcp <- gather(tmp_tcp, PartyAb, tcp.percent)
+#   
+#   tmp_tcp <- tmp_tcp[tmp_tcp$PartyAb != "DivisionNm",]
+#   tmp_tcp_total <- as.numeric(tmp_tcp$tcp.percent[tmp_tcp$PartyAb == "total"])
+#   tmp_tcp <- tmp_tcp[tmp_tcp$PartyAb != "total",]
+#   tmp_tcp$tcp.percent <- as.numeric(tmp_tcp$tcp.percent)
+#   tmp_tcp$tcp.percent[tmp_tcp$tcp.percent == 0] <- NA
+#   tmp_tcp$tcp.votes <- tmp_tcp$tcp.percent / 100 * tmp_tcp_total
+#   
+#   #tmp_tcp_leading <- tmp_tcp$PartyAb[tmp_tcp$tcp.percent >= 50]
+#   #tmp_tcp_laging <- tmp_tcp$PartyAb[tmp_tcp$tcp.percent > 0 & tmp_tcp$tcp.percent < 50]
+#   
+#   tmp_table <- tmp_totals %>% 
+#     left_join(tmp_tcp, by = "PartyAb") %>% 
+#     select(-DivisionNm, -tcp.percent)
+#   
+#   tmp_tcp_table <- derived_hor_tcp_type %>% 
+#     filter(DivisionNm == division) %>% 
+#     select(CandidateID, 12:19)
+#   
+#   names(tmp_tcp_table)[-1] <- gsub("^", "tcp.", names(tmp_tcp_table)[-1])
+#   
+#   tmp_table <- tmp_table %>% 
+#     left_join(tmp_tcp_table, by = "CandidateID")
   
-  tmp_table <- tmp_totals %>% 
-    left_join(tmp_tcp, by = "PartyAb") %>% 
-    select(-DivisionNm, -tcp.percent)
-  
-  tmp_tcp_table <- derived_hor_tcp_type %>% 
-    filter(DivisionNm == division) %>% 
-    select(CandidateID, 12:19)
-  
-  names(tmp_tcp_table)[-1] <- gsub("^", "tcp.", names(tmp_tcp_table)[-1])
-  
-  tmp_table <- tmp_table %>% 
-    left_join(tmp_tcp_table, by = "CandidateID")
-  
-  return(tmp_table)
+  return(tmp_totals)
   
 }
 
 division_total_percent <- function(division){
+  
+  ## FIXME: This would be more like the AEC's VTR display if it should percentages by column.
   
   tmp_votes <- division_total_votes(division)
   
@@ -368,7 +430,7 @@ division_total_percent <- function(division){
     filter(Surname == "Informal")
   
   tmp_all_totals <- tmp_votes %>% 
-    summarise_each(funs(sum(.,na.rm=TRUE)), -PartyAb, -Surname, -GivenNm, -Elected, -HistoricElected)
+    summarise_each(funs(sum(.,na.rm=TRUE)), -DivisionNm, -PartyAb, -Surname, -GivenNm, -Elected, -HistoricElected)
   
   tmp_informal <- tmp_informal %>% mutate(ordinary = ordinary / tmp_all_totals$total * 100,
                                           prepoll.ordinary = prepoll.ordinary / tmp_all_totals$total * 100,
@@ -381,14 +443,48 @@ division_total_percent <- function(division){
   
   tmp_formal_totals <- tmp_votes %>% 
     filter(Surname != "Informal") %>% 
-    summarise_each(funs(sum(.,na.rm=TRUE)), -PartyAb, -Surname, -GivenNm, -Elected, -HistoricElected)
+    summarise_each(funs(sum(.,na.rm=TRUE)),-CandidateID, -DivisionNm, -PartyAb, -Surname, -GivenNm, -Elected, -HistoricElected)
   
   tmp_formal <- tmp_votes %>% 
     filter(Surname != "Informal") %>% 
-    mutate_each(funs(. / tmp_formal_totals$total * 100), -PartyAb, -Surname, -GivenNm, -Elected, -HistoricElected, -tcp.Swing)
+    mutate(ordinary = ordinary / tmp_formal_totals$ordinary * 100,
+           prepoll.ordinary = prepoll.ordinary / tmp_formal_totals$prepoll.ordinary * 100,
+           absent = absent / tmp_formal_totals$absent * 100,
+           provisional = provisional / tmp_formal_totals$provisional * 100,
+           prepoll.dec = prepoll.dec / tmp_formal_totals$prepoll.dec * 100,
+           postal = postal / tmp_formal_totals$postal * 100,
+           total = total / tmp_formal_totals$total * 100)
+    #mutate_each(funs(. / tmp_formal_totals$total * 100), -DivisionNm, -PartyAb, -Surname, -GivenNm, -Elected, -HistoricElected)
   
-  return(rbind(tmp_formal, tmp_informal) %>% select(-CandidateID, -tcp.votes))
+  tmp_table <- rbind(tmp_formal, tmp_informal) %>% select(-CandidateID)
   
+  tmp_table <- tmp_table %>% 
+    mutate_if(is.numeric, funs(round(., digits = 2)))
+  
+  tmp_table <- replace(tmp_table, is.na(tmp_table), 0)
+  
+  return(tmp_table)
+  
+}
+
+division_tcp_votes <- function(division){
+  tmp_div_tcp <- tcp_by_vote_type_by_division_percent() %>% 
+    filter(DivisionNm == division) %>% 
+    select(DivisionNm, PartyAb, Surname, GivenNm, Elected, HistoricElected, OrdinaryVotes:TotalVotes)
+  return(tmp_div_tcp)
+}
+
+division_tcp_percent <- function(division){
+  tmp_div_tcp_percent <- tcp_by_vote_type_by_division_percent() %>% 
+    filter(DivisionNm == division) %>% 
+    select(DivisionNm, PartyAb, Surname, GivenNm, Elected, HistoricElected, tpp.percent.OrdinaryVotes:tpp.percent.TotalVotes) %>% 
+    mutate_if(is.numeric, funs(round(., digits = 2)))
+  
+  names(tmp_div_tcp_percent)[7:13] <- gsub("tpp.percent.", "", names(tmp_div_tcp_percent)[7:13])
+
+  tmp_div_tcp_percent <- replace(tmp_div_tcp_percent, is.na(tmp_div_tcp_percent), 0)
+  
+  return(tmp_div_tcp_percent)
 }
 
 seat_summary <- function() {
@@ -420,14 +516,33 @@ seat_summary <- function() {
 ## Senate Analysis ----
 ##
 
-# Senate first preference by division
-sen_fp_div <- get_vtr_file("SenateFirstPrefsByDivisionByVoteTypeDownload-20499.csv")
+get_sen_results <- function(){
+  
+  vtr_time_sen <<-  Sys.time()
+  
+  # Senate first preference by division
+  sen_fp_div <<- get_vtr_file("SenateFirstPrefsByDivisionByVoteTypeDownload-20499.csv")
+  
+  # Senate first preference by group by vote type
+  sen_fp_group_type <<- get_vtr_file("SenateFirstPrefsByStateByGroupByVoteTypeDownload-20499.csv")
+  
+  # Senate First preferences by state by group by vote type
+  sen_fp_state_group_type <<- get_vtr_file("SenateFirstPrefsByDivisionByVoteTypeDownload-20499.csv")
+  
+}
 
-# Senate first preference by group by vote type
-sen_fp_group_type <- get_vtr_file("SenateFirstPrefsByStateByGroupByVoteTypeDownload-20499.csv")
+get_sen_results()
 
-# Senate First preferences by state by group by vote type
-sen_fp_state_group_type <- get_vtr_file("SenateFirstPrefsByDivisionByVoteTypeDownload-20499.csv")
+# Senate turnout by state (as a proportion of enrolments):
+prelim_senate_turnout_by_state <- function() {
+  sen_fp_div %>% 
+    select(StateAb, PartyName, TotalVotes) %>% 
+    group_by(StateAb) %>% 
+    summarise(votes=sum(TotalVotes)) %>% 
+    left_join(enrolment_div %>% group_by(StateAb) %>% summarise(enrolment=sum(Enrolment))) %>% 
+    mutate(percent_enrolment = votes/enrolment * 100) %>% 
+    select(StateAb, votes, percent_enrolment)
+}
 
 # Senate Quotas (DD and half Senate)
 calculate_senate_quotas <- function(vacancies=6){
@@ -467,7 +582,7 @@ senate_quotas_candidate <- function(vacancies){
     mutate(quota=ifelse(StateAb == "ACT"|StateAb == "NT", (StateTotal/3)+1, (StateTotal/(vacancies+1))+1))
 
   tmp_candidate_quotas <- sen_fp_state_group_type %>% 
-    group_by(StateAb, Ticket, BallotPosition, PartyAb, PartyName, CandidateDetails) %>% 
+    group_by(StateAb, Ticket, BallotPosition, PartyAb, PartyName, CandidateDetails, Elected, HistoricElected) %>% 
     summarise(OrdinaryVotes = sum(OrdinaryVotes),
               AbsentVotes = sum(AbsentVotes),
               ProvisionalVotes = sum(ProvisionalVotes),
