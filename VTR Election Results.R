@@ -487,6 +487,22 @@ division_tcp_percent <- function(division){
   return(tmp_div_tcp_percent)
 }
 
+public_funding_hor <- function(){
+  tmp_funding_hor <- formal_hor_votes_by_party_by_div() %>% 
+    left_join(formal_hor_votes_by_party_by_div() %>% 
+                group_by(DivisionNm) %>% 
+                summarise(total = sum(votes)), by = "DivisionNm") %>% 
+    mutate(percent = votes/total * 100) %>% 
+    filter(percent > 4.0) %>% 
+    ungroup() %>% 
+    select(PartyAb, votes) %>% 
+    group_by(PartyAb) %>% 
+    summarise(total.votes = sum(votes)) %>% 
+    mutate(funding = total.votes * 262.784 /100) %>% 
+    arrange(desc(funding))
+  return(tmp_funding_hor)
+}
+
 seat_summary <- function() {
   
   tmp_enrolments <- enrolment_div %>% 
