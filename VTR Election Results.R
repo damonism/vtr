@@ -1,13 +1,10 @@
-library(dplyr) # Requires dplyr >= 0.5
-library(tidyr)
-
 ##
-## Functions list
+## Functions list -----
 ##
 ## get_vtr_file() <- Download a CSV file from the VTR. 
 ##
 ## HoR functions
-## -------------
+## 
 ## polling_place_results_by_candidate() <- Results by polling place and candidate with dec votes as dummy PPs
 ## prelim_senate_turnout_by_state() <- Percentage turnout for Senate votes by state based on state enrolments
 ## formal_hor_votes_by_party_by_div() <- Formal HoR votes by party by division
@@ -20,9 +17,16 @@ library(tidyr)
 ## percent_party_vote_by_division() <- Number and proportion of each party's vote by division.
 ##
 ## Senate functions
-## ----------------
+##
 ## senate_quotas_candidate(vacancies) <- Senate quotas by vote type by group by candidate
 ## calculate_senate_quotas(vacancies) <- Calculate senate first preference quotas (based on vacancies)
+
+##
+## Global functions and libraries ----
+##
+
+library(dplyr) # Requires dplyr >= 0.5
+library(tidyr)
 
 # What time is the data current as of?
 vtr_time <-  Sys.time()
@@ -34,7 +38,7 @@ get_vtr_file <- function(filename) {
 }
 
 ##
-## HoR functions
+## HoR Analysis ----
 ##
 
 # HoR First Preference by Polling Place
@@ -413,7 +417,7 @@ seat_summary <- function() {
 }
 
 ##
-## Senate functions
+## Senate Analysis ----
 ##
 
 # Senate first preference by division
