@@ -14,6 +14,8 @@
 ## division_total_percent(division) <- Same thing, but with everything as a percentage of the total vote
 ## tcp_by_vote_type_by_division() <- Adds the pre-poll ordinaries to the TCP by type by division table
 ## percent_party_vote_by_division() <- Number and proportion of each party's vote by division.
+## public_funding_group_hor() <- Public funding by group (HoR) - does not include independents.
+## seat_summary(save_as_csv) <- Seat overview. Use arguement "Y" to save as CSV to working directory.
 ##
 ### TCP
 ## tcp_by_vote_type_by_division()
@@ -30,6 +32,8 @@
 
 library(dplyr) # Requires dplyr >= 0.5
 library(tidyr)
+
+setwd("//home4/mullerd$/My Documents/Data/2016 Federal Election")
 
 # What time is the data current as of?
 vtr_time <-  Sys.time()
@@ -119,8 +123,6 @@ polling_place_results_by_candidate <- function(){
   return(tmp_pp_all)
 }
 
-derived_pp_all <- polling_place_results_by_candidate()
-
 # Formal House of Reps votes by Division
 formal_hor_votes_by_party_by_div <- function() {
   tmp_formal_votes_div <- hor_fp_pp %>% 
@@ -130,8 +132,6 @@ formal_hor_votes_by_party_by_div <- function() {
   
   return(tmp_formal_votes_div)
 }
-
-derived_formal_votes_div <- formal_hor_votes_by_party_by_div()
 
 # Two candidate preferred by parties by Polling Place
 tcp_by_party_by_pollingplace <- function(){
@@ -170,8 +170,6 @@ tcp_by_party_by_pollingplace <- function(){
   
   return(tmp_tcp_pp)
 }
-
-derived_tcp_pp <- tcp_by_party_by_pollingplace()
 
 # TCP by polling place as percentage
 tcp_by_party_by_pollingplace_percent <- function(){
@@ -224,10 +222,9 @@ tcp_by_vote_type_by_division <- function(){
   return(tmp_hor_tcp_type)
 }
 
-derived_hor_tcp_type <- tcp_by_vote_type_by_division()
-
 tcp_by_vote_type_by_division_percent <- function(){
   
+  # This is essentially the "TCP Everything" table
   # Note:
   # tcp.percent. => vote as a percentage of total vote for all candidates in the division
   # party.percent. => vote as a percentage of that party's total TCP vote. 
@@ -366,8 +363,6 @@ vote_type_by_div_inc_ppord <- function() {
   return(tmp_vote_type_ppord)
 }
 
-derived_div_total_type <- vote_type_by_div_inc_ppord()
-
 division_total_votes <- function(division) {
   
   tmp_totals <- derived_pp_all %>% 
@@ -487,7 +482,11 @@ division_tcp_percent <- function(division){
   return(tmp_div_tcp_percent)
 }
 
-public_funding_hor <- function(){
+public_funding_group_hor <- function(){
+  
+  # Note that this is only by party. Certain independents will receive sufficient votes to
+  # get public funding too. Maybe do a new function by candidates.
+  
   tmp_funding_hor <- formal_hor_votes_by_party_by_div() %>% 
     left_join(formal_hor_votes_by_party_by_div() %>% 
                 group_by(DivisionNm) %>% 
@@ -500,10 +499,16 @@ public_funding_hor <- function(){
     summarise(total.votes = sum(votes)) %>% 
     mutate(funding = total.votes * 262.784 /100) %>% 
     arrange(desc(funding))
+  
+  # Group the Coalition parties
+  tmp_funding_hor$group <- as.character(tmp_funding_hor$PartyAb)
+  tmp_funding_hor$group[tmp_funding_hor$PartyAb %in% c("LP", "LNP", "NP", "CLP")] <- "COAL"
+  tmp_funding_hor$group <- as.factor(tmp_funding_hor$group)
+
   return(tmp_funding_hor)
 }
 
-seat_summary <- function() {
+seat_summary <- function(save_as_csv="N") {
   
   tmp_enrolments <- enrolment_div %>% 
     select(DivisionID, Enrolment)
@@ -526,6 +531,41 @@ seat_summary <- function() {
                 summarise(Elected = first(PartyAb)), 
               by = "DivisionID")
   
+  tmp_tcp <- tcp_by_vote_type_by_division_percent()
+  tmp_tcp_leading <- tmp_tcp %>% 
+    filter(div.percent.TotalVotes >= 50) %>% 
+    select(DivisionID, leading.party = PartyAb, leading.tcp = div.percent.TotalVotes, margin = margin.votes)
+  
+  tmp_tcp_lagging <- tmp_tcp %>% 
+    filter(div.percent.TotalVotes < 50) %>% 
+    select(DivisionID, lagging.party = PartyAb, lagging.tcp = div.percent.TotalVotes)
+  
+  tmp_tcp_all <- tmp_tcp_leading %>%
+    left_join(tmp_tcp_lagging, by = "DivisionID")
+  
+  tmp_total <- tmp_total %>% 
+    left_join(tmp_tcp_all, by = "DivisionID") %>% 
+    select(-margin, margin) %>%
+    left_join(hor_tcp_type %>% select(DivisionID, leading.party = PartyAb, Swing), by = c("DivisionID", "leading.party")) %>% 
+    mutate_if(is.numeric, funs(round(., digits = 2)))
+  
+  if(save_as_csv == "Y"){
+    filename <- paste("HoR-", format(vtr_time_hor, "%Y%m%d-%H%M"), ".csv", sep="")
+    write.csv(tmp_total, file = filename, row.names = FALSE)
+  }
+    
+  return(tmp_total)
+}
+
+update_hor_tables <- function(){
+  get_hor_results()
+  
+  derived_pp_all <<- polling_place_results_by_candidate()
+  derived_formal_votes_div <<- formal_hor_votes_by_party_by_div()
+  derived_tcp_pp <<- tcp_by_party_by_pollingplace()
+  derived_hor_tcp_type <<- tcp_by_vote_type_by_division()
+  derived_div_total_type <<- vote_type_by_div_inc_ppord()
+
 }
 
 ##
