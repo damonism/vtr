@@ -34,6 +34,7 @@ library(dplyr) # Requires dplyr >= 0.5
 library(tidyr)
 
 setwd("//home4/mullerd$/My Documents/Data/2016 Federal Election")
+CoalitionAb <- c("LP", "LNP", "NP", "CLP")
 
 # What time is the data current as of?
 vtr_time <-  Sys.time()
@@ -82,7 +83,7 @@ get_hor_results <- function(){
   
 }
 
-get_hor_results()
+#get_hor_results()
 
 # Combined polling place table (with declaration votes as dummy polling places)
 polling_place_results_by_candidate <- function(){
@@ -557,6 +558,66 @@ seat_summary <- function(save_as_csv="N") {
   return(tmp_total)
 }
 
+tcp_comparison <- function() {
+  
+  # Compare tcp votes across vote types.
+  # Should do another to do state-by-state.
+  
+  tmp_comp <- tcp_by_vote_type_by_division_percent()
+  
+  tmp_tcp_summary <- tmp_comp %>% 
+    filter(PartyAb == "ALP") %>% 
+    select(DivisionNm, PartyAb, starts_with("tpp.percent.")) %>% 
+    summarise_if(is.numeric, funs(mean=mean(., na.rm=TRUE),sd=sd(., na.rm=TRUE), n=n())) %>% 
+    gather(value="ALP")
+  
+  tmp_tcp_summary <- tmp_tcp_summary %>% 
+    left_join(tmp_comp %>%
+                filter(PartyAb %in% CoalitionAb) %>% 
+                select(DivisionNm, PartyAb, starts_with("tpp.percent.")) %>% 
+                summarise_if(is.numeric, funs(mean=mean(., na.rm=TRUE),sd=sd(., na.rm=TRUE), n=n())) %>% 
+                gather(value="COAL"), by = "key")
+
+  tmp_tcp_summary <- tmp_tcp_summary %>% 
+    left_join(tmp_comp %>%
+                filter(PartyAb == "GRN") %>% 
+                select(DivisionNm, PartyAb, starts_with("tpp.percent.")) %>% 
+                summarise_if(is.numeric, funs(mean=mean(., na.rm=TRUE),sd=sd(., na.rm=TRUE), n=n())) %>% 
+                gather(value="GRN"), by = "key")
+
+  tmp_tcp_summary <- tmp_tcp_summary %>% 
+    separate(key, into = c("Type", "Stat"), "_")
+  
+  tmp_tcp_summary$Type <- gsub("tpp.percent.", "", tmp_tcp_summary$Type)
+  
+  return(tmp_tcp_summary %>% mutate_if(is.numeric, funs(round(., digits = 2))))
+
+#   tcp_comp_leading <- tmp_comp %>% 
+#     filter(div.percent.TotalVotes >= 50) 
+#   names(tcp_comp_leading)[-1:-3] <- gsub("^", "leading.", names(tcp_comp_leading)[-1:-3])
+#   tcp_comp_lagging <- tmp_comp %>% 
+#     filter(div.percent.TotalVotes < 50) %>% 
+#     select(-StateAb, -DivisionNm, -Enrolment, -fifty.percent.enrolment)
+#   names(tcp_comp_lagging)[-1] <- gsub("^", "lagging.", names(tcp_comp_lagging)[-1])
+#   tmp_comp_all <- tcp_comp_leading %>% 
+#     left_join(tcp_comp_lagging, by = "DivisionID")
+#   
+#   tmp_comp_tbl <- tmp_comp_all %>% 
+#     select(DivisionID, DivisionNm, 
+#            leading.PartyAb, leading.OrdinaryVotes:leading.TotalVotes, leading.tpp.percent.OrdinaryVotes:leading.tpp.percent.TotalVotes,
+#            lagging.PartyAb, lagging.OrdinaryVotes:lagging.TotalVotes, lagging.tpp.percent.OrdinaryVotes:lagging.tpp.percent.TotalVotes,
+#            TotalVotes = leading.total.TotalVotes, Enrolment = leading.Enrolment)
+#   
+#   tmp_comp_tbl <- tmp_comp_tbl %>% 
+#     mutate(diff.OrdinaryVotes = leading.OrdinaryVotes - lagging.OrdinaryVotes,
+#            diff.PrepollOrdinary = leading.PrepollOrdinary - lagging.PrepollOrdinary,
+#            diff.Absent = leading.AbsentVotes - lagging.AbsentVotes,
+#            diff.Provisional = leading.ProvisionalVotes - lagging.ProvisionalVotes,
+#            diff.PrePollVotes = leading.PrePollVotes - lagging.PrePollVotes,
+#            diff.PostalVotes = leading.PostalVotes - lagging.PostalVotes,
+#            diff.TotalVotes = leading.TotalVotes - lagging.TotalVotes)
+}
+
 update_hor_tables <- function(){
   get_hor_results()
   
@@ -565,8 +626,11 @@ update_hor_tables <- function(){
   derived_tcp_pp <<- tcp_by_party_by_pollingplace()
   derived_hor_tcp_type <<- tcp_by_vote_type_by_division()
   derived_div_total_type <<- vote_type_by_div_inc_ppord()
+  derived_tcp_type <<- tcp_by_vote_type_by_division_percent()
 
 }
+
+update_hor_tables()
 
 ##
 ## Senate Analysis ----
